@@ -15,9 +15,9 @@ exports.registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
     const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
 
-    // Generate random 2FA Secret & SSEO Code awal
+    // Initial Generate
     const twoFactorSecret = crypto.randomBytes(10).toString('hex').toUpperCase();
-    const sseoCode = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 chars
+    const sseoCode = crypto.randomBytes(3).toString('hex').toUpperCase();
 
     const user = await User.create({
       username, password: hashedPassword, reqAiName: aiName, reqDevName: devName, 
@@ -28,38 +28,32 @@ exports.registerUser = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
-  const { username, password, sseoCode, method } = req.body; // method: 'password' or 'sseo'
-  
+  const { username, password, sseoCode, method } = req.body;
   try {
     const user = await User.findOne({ username });
-    
     if (!user) return res.status(401).json({ message: 'User not found' });
 
-    // CEK BANNED SAAT LOGIN
     if (user.healthPoints <= 0 && user.role !== 'admin') {
         return res.status(403).json({ message: 'ACCOUNT_BANNED' });
     }
 
     let isValid = false;
-
     if (method === 'sseo') {
-        // Login pakai SSEO Code
-        if (user.sseoEnabled && user.sseoCode === sseoCode) {
-            isValid = true;
-        } else {
-            return res.status(401).json({ message: 'Invalid SSEO Code or SSEO Disabled' });
-        }
+        if (user.sseoEnabled && user.sseoCode === sseoCode) isValid = true;
+        else return res.status(401).json({ message: 'Invalid SSEO Code' });
     } else {
-        // Login pakai Password biasa
-        if (await bcrypt.compare(password, user.password)) {
-            isValid = true;
-        }
+        if (await bcrypt.compare(password, user.password)) isValid = true;
     }
 
     if (isValid) {
       user.lastLogin = new Date();
       user.lastIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       user.forceLogout = false;
+      
+      // Pastikan field penting ada saat login
+      if(!user.twoFactorSecret) user.twoFactorSecret = crypto.randomBytes(10).toString('hex').toUpperCase();
+      if(!user.sseoCode) user.sseoCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+      
       await user.save();
 
       const healthStr = `${user.healthPoints}% (${user.healthPoints > 50 ? 'HEALTHY' : 'CRITICAL'})`;
@@ -71,17 +65,14 @@ exports.loginUser = async (req, res) => {
         aiName: user.isApproved ? user.reqAiName : 'DevCORE',
         devName: user.isApproved ? user.reqDevName : 'XdpzQ',
         isApproved: user.isApproved,
-        avatarUrl: user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`,
+        avatarUrl: user.avatarUrl,
         personalApiKey: user.personalApiKey,
-        
-        // Stats & Settings Data
         apiReqCount: user.apiReqCount,
         tokenUsage: user.tokenUsage,
         lastLogin: user.lastLogin,
         healthStatus: healthStr,
         fontPreference: user.fontPreference || 'Roboto',
         sseoEnabled: user.sseoEnabled,
-        
         token: generateToken(user._id)
       });
     } else {
@@ -90,13 +81,28 @@ exports.loginUser = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
+// UPDATE GET ME (REAL-TIME DATA FIX)
 exports.getMe = async (req, res) => {
     try {
         const user = await User.findById(req.user._id).select('-password');
         if(user) {
+            // FIX: Jika user lama belum punya secret/code, buatkan sekarang
+            let needsSave = false;
+            if(!user.twoFactorSecret) {
+                user.twoFactorSecret = crypto.randomBytes(10).toString('hex').toUpperCase();
+                needsSave = true;
+            }
+            if(!user.sseoCode) {
+                user.sseoCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+                needsSave = true;
+            }
+            if(needsSave) await user.save();
+
             const healthStr = `${user.healthPoints}% (${user.healthPoints > 50 ? 'HEALTHY' : 'CRITICAL'})`;
+            
+            // Kirim object user lengkap (mongoose doc to object)
             res.json({
-                ...user._doc,
+                ...user.toObject(),
                 healthStatus: healthStr
             });
         } else {
@@ -124,7 +130,6 @@ exports.generateUserApiKey = async (req, res) => {
     res.json({ apiKey: newKey });
 };
 
-// UPDATE SETTINGS (Font, SSEO)
 exports.updateSettings = async (req, res) => {
     const { font, sseoEnabled, sseoCodeNew } = req.body;
     const user = await User.findById(req.user._id);
