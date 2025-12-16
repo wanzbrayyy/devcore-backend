@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 const { 
-    getUsers, toggleApproval, 
-    getConfig, updateMaintenance, // Import fungsi baru
+    getUsers, toggleApproval, updateUserRole, // Import fungsi baru
+    getConfig, updateMaintenance,
     addApiKey, deleteApiKey,
     addQuote, getQuotes, deleteQuote 
 } = require('../controllers/adminController');
@@ -11,12 +11,13 @@ const {
 // Users
 router.get('/users', protect, adminOnly, getUsers);
 router.post('/approve', protect, adminOnly, toggleApproval);
+router.post('/role', protect, adminOnly, updateUserRole); // Endpoint Baru
 
-// System Config
+// System
 router.get('/config', protect, adminOnly, getConfig);
-router.post('/maintenance', protect, adminOnly, updateMaintenance); // Route Baru
+router.post('/maintenance', protect, adminOnly, updateMaintenance);
 
-// API Keys
+// API
 router.post('/apikey', protect, adminOnly, addApiKey);
 router.delete('/apikey/:id', protect, adminOnly, deleteApiKey);
 
