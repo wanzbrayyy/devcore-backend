@@ -21,14 +21,12 @@ exports.toggleApproval = async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
-// FITUR BARU: UPDATE USER ROLE (Admin Only)
 exports.updateUserRole = async (req, res) => {
     const { userId, newRole } = req.body;
     try {
         const user = await User.findById(userId);
         if(!user) return res.status(404).json({ message: 'User not found' });
-        
-        user.role = newRole; // admin, demon, premium, user
+        user.role = newRole; 
         await user.save();
         res.json({ success: true, message: `Role changed to ${newRole}` });
     } catch(e) { res.status(500).json({ error: e.message }); }
@@ -41,13 +39,25 @@ exports.getConfig = async (req, res) => {
   res.json(config);
 };
 
+// FUNGSI UTAMA MAINTENANCE (DIPERBAIKI)
 exports.updateMaintenance = async (req, res) => {
-    const { enabled } = req.body;
-    let config = await GlobalConfig.findOne();
-    if(!config) config = await GlobalConfig.create({});
-    config.maintenanceMode = enabled;
-    await config.save();
-    res.json({ success: true, maintenanceMode: config.maintenanceMode });
+    const { enabled } = req.body; // Menerima true/false dari frontend
+    try {
+        let config = await GlobalConfig.findOne();
+        if(!config) config = await GlobalConfig.create({});
+        
+        config.maintenanceMode = enabled;
+        await config.save();
+        
+        // Return status terbaru agar frontend bisa sync
+        res.json({ 
+            success: true, 
+            message: `Maintenance Mode is now ${enabled ? 'ON' : 'OFF'}`,
+            maintenanceMode: config.maintenanceMode 
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Failed to update config" });
+    }
 };
 
 // API KEYS
