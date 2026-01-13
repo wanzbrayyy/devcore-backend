@@ -73,7 +73,7 @@ exports.sendMessage = async (req, res) => {
 
   try {
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: "nex-agi/deepseek-v3.1-nex-n1:free", 
+      model: "mistralai/devstral-2512:free", 
       messages: [
         { role: 'system', content: systemPrompt },
         ...chatHistory.messages.map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.content })),
